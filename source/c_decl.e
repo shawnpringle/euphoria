@@ -741,7 +741,7 @@ sequence preprocessor_stack = {}
 -- output a C preprocessor statement with no arguments and put a new line on the end to the C file
 export procedure m_stmtln(sequence stmt)
     if length(stmt) > 4 then
-        if (equal("#else", stmt[1..5]) or equal("#end", stmt[1..4])) and indent >= 4 then
+        if (equal("#else", stmt[1..5]) or equal("#elif", stmt[1..5]) or equal("#end", stmt[1..4])) and indent >= 4 then
             indent -= 4
         end if
     end if
