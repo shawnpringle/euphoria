@@ -19,10 +19,8 @@ include std/net/url.e as url
 include std/get.e
 include euphoria/info.e
 include std/machine.e
-include std/filesys.e
 include curl/curl.e as curl
 include curl/easy.e
-include std/machine.e
 include std/dll.e
 
 ifdef not EUC_DLL then
@@ -48,18 +46,15 @@ public enum by -1
 	ERR_HOST_LOOKUP_FAILED,
 	ERR_CONNECT_FAILED,
 	ERR_SEND_FAILED,
-	ERR_RECEIVE_FAILED,
-        ERR_LIBRARY_INIT, -- could not load all of the routines from the CURL library
-	ERR_CURL_INIT     -- could not initialize CURL
+	ERR_RECEIVE_FAILED
 
 --****
 -- === Constants
 
-public type enum fixed_header_type
+public enum
 	FORM_URLENCODED,
 	MULTIPART_FORM_DATA
-end type
-
+	
 public enum
 	--**
 	-- No encoding is necessary
@@ -90,6 +85,8 @@ function format_base_request(sequence request_type, sequence url, object headers
 	object parsedUrl = url:parse(url)
 	if atom(parsedUrl) then
 		return ERR_MALFORMED_URL
+	elsif not equal(parsedUrl[URL_PROTOCOL], "http") then
+		return ERR_INVALID_PROTOCOL
 	end if
 
 	sequence host = parsedUrl[URL_HOSTNAME]
@@ -205,7 +202,7 @@ function multipart_form_data_encode(sequence kvpairs, sequence boundary)
 			end switch
 		else
 			data &= "\r\n"
-		end if  
+		end if	
 			
 		data &= "\r\n" & kvpair[2]
 	end for
@@ -529,6 +526,40 @@ end function
 constant curl_header_cb = call_back({'+',routine_id("curl_header_callback")}) 
 
 
+-- @nodoc@
+function http_get_sockets(sequence url, object headers = 0, natural follow_redirects = 10,
+		natural timeout = 15)
+	object request, content
+	sequence content_1
+	
+	while follow_redirects > 0 and length(content_1) >= 1 and length(content_1[1]) >= 2 and
+				find(content_1[1][2], {"301","302","303","307","308"}) with entry do
+		follow_redirects -= 1
+		
+		url = redirect_url(request, content_1)
+	entry
+		request = format_base_request("GET", url, headers)
+		
+		if atom(request) then
+			return request
+		end if
+		-- No more work necessary, terminate the request with our ending CR LF
+		request[R_REQUEST] &= "\r\n"
+		content = execute_request(request[R_HOST], request[R_PORT], request[R_REQUEST], timeout)
+		if length(content) != 2 then
+			exit
+		end if
+		content_1 = content[1]
+	end while
+
+	return content	
+end function
+
+-- @nodoc@
+function http_get_wininet(sequence url, object headers = 0, natural follow_redirects = 10,
+		natural timeout = 15)
+		return http_get_sockets(url, headers, follow_redirects, timeout)
+end function
 
 --**
 -- Get a HTTP resource.
@@ -565,15 +596,19 @@ constant curl_header_cb = call_back({'+',routine_id("curl_header_callback")})
 public function http_get(                                            
     sequence url, object headers = 0, 
     natural follow_redirects = 10, natural timeout = 15)
-    atom url_ptr = allocate_string(url), res, list = 0
+    
+    atom res, list = 0
     if libcurl = 0 then
-	return ERR_LIBRARY_INIT
-    end if     
+        -- library could not be loaded.
+        return http_get_wininet(url, headers, follow_redirects, timeout)
+    end if
     atom curl = curl_easy_init()
     if curl = 0 then
-	return ERR_CURL_INIT
+	-- could not open a CURL handle.
+	return http_get_wininet(url, headers, follow_redirects, timeout)
     end if 
-    -- Temporary: <<<< Remove before merge
+    atom url_ptr = allocate_string(url, 1) 
+    -- Temprary: <<<< Remove before merge
     atom error_buffer = allocate(CURL_ERROR_SIZE)
     -- Temporary: >>>> Remove before merge
 
