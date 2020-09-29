@@ -45,18 +45,17 @@
 
 
 # ************************************************************************************************************* #
-#                                       RULES FOR MODIFYING MAKE RULES                                          #
+#                                       RULES FOR MODIFYING MAKE RULES                                                                                         #
 # ************************************************************************************************************* #
-#  *  Inside make dependency lines DO NOT leave spaces around the equals sign in asssignment statements!        #
-#     It is uglier but instead you must leave the definition stuck together with the variable, like this:       #
-#                  EU_MAIN=$(FOO)                                                                               #
-#     Consequence if this rule is not followed:  Possibly make will say there is nothing to be done to make a   #
-#     target when it is in fact out of date                                                                     #
-#                                                                                                               #
-#                                                                                                               #
-#  * Do not make symbolic targets as dependencies of other targets.                                             #
-#    Consequence if this rule is not followed:   Make will try to make a target even if it is up to date        #
-#                                                                                                               #
+#  *  Inside make dependency lines DO NOT leave spaces around the equals sign in asssignment statements!        
+#     It is uglier but instead you must leave the definition stuck together with the variable, like this:                      
+#                  EU_MAIN=$(FOO)                                                                                            
+#     Consequence if this rule is not followed:  Possibly make will say there is nothing to be done to make a             
+#     target when it is in fact out of date                                                                                 
+#     
+#  * Do not make symbolic targets as dependencies of other targets.                                                                                             
+#    Consequence if this rule is not followed:   Make will try to make a target even if it is up to date        
+#                                                                                                               
 # ************************************************************************************************************* #
 
 
