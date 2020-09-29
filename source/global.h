@@ -7,7 +7,14 @@
 #ifndef H_GLOBAL
 #define H_GLOBAL
 
+
+#if defined(__WATCOMC__)
+#define EWATCOM
+#endif
 #ifdef _WIN32
+#if !defined(EWINDOWS)
+#define EWINDOWS
+#endif
 #include <windows.h>
 #endif
 #ifdef EWATCOM
@@ -24,7 +31,7 @@ typedef signed   char   schar;
 #define _LARGEFILE64_SOURCE
 #include <stdint.h>
 
-#if defined(EWINDOWS) && INTPTR_MAX == INT64_MAX
+#if defined(_WIN64)
 // MSVCRT doesn't handle long double output correctly
 #define __USE_MINGW_ANSI_STDIO 1
 #endif

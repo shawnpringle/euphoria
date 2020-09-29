@@ -37,16 +37,19 @@
 /******************/
 /* Included files */
 /******************/
-#define _SVID_SOURCE
 #include <stdint.h>
-#if defined(_WIN32) && INTPTR_MAX == INT64_MAX
+#if defined(_WIN64)
 // MSVCRT doesn't handle long double output correctly
 #define __USE_MINGW_ANSI_STDIO 1
+#else
+#define _SVID_SOURCE 1
 #endif
 #include <stdio.h>
 #include <time.h>
-#ifdef EUNIX
-#	include <sys/times.h>
+#if defined(__GNUC__)
+#   if defined(_unix)
+#	    include <sys/times.h>
+#   endif
 #	include <string.h>
 #else
 #	ifdef __WATCOMC__
@@ -556,10 +559,66 @@ static object do_peek4(object a, int b )
 	return top;
 }
 
-#if INTPTR_MAX == INT32_MAX
+#if !defined(__x86_64__)
 #define POKE_LIMIT(x) "poke" #x " is limited to 32-bit numbers"
 #else
 #define POKE_LIMIT(x) "poke" #x " is limited to 64-bit numbers"
+#endif
+
+#ifdef __WATCOMC__
+// 754 - double format as a struct with bitfields.
+typedef struct  {
+    unsigned int frac2:32;
+    unsigned int frac1:20;
+    unsigned int exp:11;
+    unsigned int sign:1;
+} dbl64_format;
+
+union ds {
+    double n;
+    dbl64_format s;
+};
+
+static double trunc(const double f) {
+    union ds d;
+    signed int ff;
+    d.n = f;
+    // A smaller ff number means a greater value of d.n.
+    ff = 1043 - d.s.exp;
+    #if DDEBUG
+    printf("f = %.15g: sign = %d, exp = %d, frac = %u %u. ff = %d:", d.n, d.s.sign, d.s.exp, d.s.frac1, d.s.frac2, ff);
+    #endif
+    if (d.s.sign == 0 && d.s.exp == 0 && d.s.frac1 == 0 && d.s.frac2 == 0) {
+    #if DDEBUG
+    	printf("==> trunc(f) = %0.3g\n", 0.0);
+    #endif
+    	return f;
+    }
+    #if DDEBUG
+    	printf("2**ff: %d", (1 << ff));
+    #endif
+    if (ff >= 0) {
+    	d.s.frac1 &= ~((1 << ff) - 1);
+    	d.s.frac2 = 0;
+    } else if (ff > -32) {
+    	ff += 32;
+    	d.s.frac2 &= ~((1 << ff) - 1);
+    } // else no bits in d.s.frac* are non-integer valued 
+    // so leave both d.s.frac* as they are
+    
+    if (d.s.exp < 1023 && d.s.frac1 == 0 && d.s.frac2 == 0) {
+    	// the implicitly bit when frac1==0 and d.s.exp<1023 is <1.  Set this to 
+    	// special zero case.
+    	d.s.exp = 0;
+    	d.s.sign = 0;
+    }
+    //d.s.frac1 &= (((ff + 1) << 1) - 1);
+    #if DDEBUG
+    	printf("sign = %d, exp = %d, frac = %u %u", d.s.sign, d.s.exp, d.s.frac1, d.s.frac2);
+    	printf("==> trunc(f) = %.14g\n", d.n);
+    #endif
+    return d.n;    
+}
 #endif
 
 static void do_poke2(object a, object top)
@@ -962,10 +1021,18 @@ void InitExecute()
 	// a bit of cleanup - tick rate, profile, active page etc.
 #endif
 
-// detect matherr support
-#if defined(DOMAIN) && defined(SING) && defined(OVERFLOW) && defined(UNDERFLOW) && defined(TLOSS) && defined(PLOSS)
+// MinGW doesn't support the way we detect math errors, so our unittests fail 
+// These are t_c_*overflow*.e and t_c_*underflow*.e files.  This only effects
+// when users try to do impossible things in math, or use literals that are too long
+// to be a number we can fit into our longest number type.
+// So, if you find you get a compile error here and you're using MinGW on 32-bit.  
+// Goto your _mingw.h file, look at __MINGW32_MAJOR_VERSION and update the constant 
+// below to the current value of the major version in the _mingw.h file.
+#if !defined(__MINGW32_VERSION) || (__MINGW32_MAJOR_VERSION > 5)
 	// enable our matherr function
+#ifdef __LCC__
 	_LIB_VERSION = _SVID_;
+#endif
 #endif
     
 #ifdef _WIN32
@@ -3100,7 +3167,7 @@ void do_exec(intptr_t *start_pc)
 					c = a;
 					b = top;
 
-#if INT64_MAX == INTPTR_MAX
+#ifdef __x86_64__
 					{
 						int128_t product = (int128_t)c * (int128_t)b;
 						if( product == (int128_t)( a = (intptr_t)product ) && IS_ATOM_INT( product ) ){
@@ -4614,7 +4681,7 @@ void do_exec(intptr_t *start_pc)
 				thread();
 				BREAK;
 
-#if INTPTR_MAX == INT64_MAX
+#if defined(__x86_64__)
 			case L_PEEK_POINTER:
 #endif
 			case L_PEEK8U:
@@ -4636,7 +4703,7 @@ void do_exec(intptr_t *start_pc)
 				BREAK;
 
 
-#if INTPTR_MAX == INT32_MAX
+#if defined(__i386__)
 			case L_PEEK_POINTER:
 #endif
 			case L_PEEK4U:
@@ -4769,7 +4836,7 @@ void do_exec(intptr_t *start_pc)
 				inc3pc();
 				thread();
 				BREAK;
-#if INT64_MAX == INTPTR_MAX
+#if defined(__x86_64__)
 			case L_POKE_POINTER:
 #endif
 			case L_POKE8:
@@ -4782,7 +4849,7 @@ void do_exec(intptr_t *start_pc)
 				thread();
 				BREAK;
 				
-#if INT32_MAX == INTPTR_MAX
+#if defined(__i386__)
 			case L_POKE_POINTER:
 #endif
 			case L_POKE4:
