@@ -4,7 +4,7 @@ include std/search.e
 include std/math.e
 include std/os.e
 include std/pretty.e
-
+with trace
 ifdef not NOINET_TESTS then
 	-- this gives the server user:pass of devel:devel
 	constant authorize_header = {"Authorization", "Basic ZGV2ZWw6ZGV2ZWw="} 
@@ -36,7 +36,7 @@ ifdef not NOINET_TESTS then
 	end if
 
 	-- Test nested sequence post data
-	sequence num = sprintf("%d", { rand_range(1000,10000) })
+	sequence num =sprintf("%d", { rand_range(1000,10000) })
 	sequence data = {
 		{ "data", num }
 	}
@@ -52,34 +52,38 @@ ifdef not NOINET_TESTS then
 		{ "Cache-Control", "no-cache" },
 		authorize_header
 	}
+	-- should set post_test.txt to data={num}
 	content = http_get("http://test.openeuphoria.org/post_test.txt", headers )
 	if atom(content) or length(content) < 2 then
 		test_true("http_get with headers #2", sequence(content))
 		test_fail("http_get with headers #3")
 		test_fail("http_get with headers #4")
-		test_fail("http_get with headers #5")
-		test_fail("http_get with headers #6")
+		test_fail("http_post with headers #5")
+		test_fail("http_post with headers #6")
 		test_fail("http_get with headers #7")
 		test_fail("http_get with headers #8")
 	else
 		test_pass("http_get with headers #2")
 		assert("http_get with headers #3", length(content) = 2)
+		-- tests to make sure http_post actually set the content
 		test_equal("http_get with headers #4", "data=" & num, content[2])
 
 		-- Test already encoded string
 		num = sprintf("%d", { rand_range(1000,10000) })
 		data = sprintf("data=%s", { num })
+		-- should set post_test.txt to data={num}
 		content = http_post("http://test.openeuphoria.org/post_test.ex", data, {authorize_header})
 		if sequence(content) and length(content) = 2 then
-			test_pass("http_get with headers #5")
-			test_equal("http_get with headers #6", "success", content[2])
+			test_pass("http_post with headers #5")
+			test_equal("http_post with headers #6", "success", content[2])
 		else
-			test_fail("http_get with headers #5")
-			test_fail("http_get with headers #6")
+			test_fail("http_post with headers #5:" & pretty_sprint(content))
+			test_fail("http_post with headers #6")
 		end if
 
 		content = http_get("http://test.openeuphoria.org/post_test.txt", headers)
 		assert("http_get with headers #7", length(content) = 2)
+		-- Tests to see if the earlier http_post actually affect the content of post_test.txt.
 		test_equal("http_get with headers #8", "data=" & num, content[2])
 	end if
 
