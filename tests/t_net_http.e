@@ -3,6 +3,7 @@ include std/net/http.e
 include std/search.e
 include std/math.e
 include std/os.e
+include std/pretty.e
 
 ifdef not NOINET_TESTS then
 	-- this gives the server user:pass of devel:devel
@@ -11,7 +12,8 @@ ifdef not NOINET_TESTS then
 	object content
 
 	content = http_get("http://www.iana.org/")
-	assert("http_get content readable with http_get slash only path", length(content) > 1)
+	test_true("http_get underlying CURL library gets loaded", compare(content, ERR_CURL_INIT))
+		assert("http_get content readable with http_get slash only path", length(content) > 1)
 	test_not_equal("http_get content non-empty with http_get slash only path", length(content[2]), 0)
 
 	content = http_get("http://www.iana.org")
@@ -34,12 +36,12 @@ ifdef not NOINET_TESTS then
 	end if
 
 	-- Test nested sequence post data
-    sequence num = sprintf("%d", { rand_range(1000,10000) })
+	sequence num = sprintf("%d", { rand_range(1000,10000) })
 	sequence data = {
 		{ "data", num }
 	}
-    content = http_post("http://test.openeuphoria.org/post_test.ex", data, 
-    	{authorize_header})
+	content = http_post("http://test.openeuphoria.org/post_test.ex", data, 
+		{authorize_header})
 	if atom(content) or length(content) < 2 then
 		test_fail("http_post post #1")
 	else
@@ -50,7 +52,7 @@ ifdef not NOINET_TESTS then
 		{ "Cache-Control", "no-cache" },
 		authorize_header
 	}
-    content = http_get("http://test.openeuphoria.org/post_test.txt", headers )
+	content = http_get("http://test.openeuphoria.org/post_test.txt", headers )
 	if atom(content) or length(content) < 2 then
 		test_true("http_get with headers #2", sequence(content))
 		test_fail("http_get with headers #3")
@@ -68,7 +70,7 @@ ifdef not NOINET_TESTS then
 		num = sprintf("%d", { rand_range(1000,10000) })
 		data = sprintf("data=%s", { num })
 		content = http_post("http://test.openeuphoria.org/post_test.ex", data, {authorize_header})
-		if atom(content) and length(content) = 2 then
+		if sequence(content) and length(content) = 2 then
 			test_pass("http_get with headers #5")
 			test_equal("http_get with headers #6", "success", content[2])
 		else
