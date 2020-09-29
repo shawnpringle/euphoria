@@ -566,7 +566,7 @@ public function http_get(
     sequence url, object headers = 0, 
     natural follow_redirects = 10, natural timeout = 15)
     atom url_ptr = allocate_string(url), res, list = 0
-    if libcurl = -1 then
+    if libcurl = 0 then
 	return ERR_LIBRARY_INIT
     end if     
     atom curl = curl_easy_init()
