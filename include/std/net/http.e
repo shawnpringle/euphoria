@@ -21,11 +21,23 @@ include euphoria/info.e
 include std/machine.e
 include std/dll.e
 include std/filesys.e
-include std/net/curl.e
+include _easy.e as curl_easy
+include curl/curl.e as curl
+constant lib = open_dll({
+  "libcurl.dll",
+  "libcurl.so"
+})
 
 ifdef not EUC_DLL then
 include std/task.e
 end ifdef
+
+constant CURLOPTTYPE_LONG = 0,
+CURLOPT_MAXREDIRS = curl:CURLOPTTYPE_LONG + 68,
+CURL_ERROR_SIZE = 256,
+CURLPROTO_HTTP = 1
+
+
 
 constant USER_AGENT_HEADER = 
 	sprintf("User-Agent: Euphoria-HTTP/%d.%d\r\n", {
@@ -53,10 +65,11 @@ public enum by -1
 --****
 -- === Constants
 
-public enum
+public type enum fixed_header_type
 	FORM_URLENCODED,
 	MULTIPART_FORM_DATA
-	
+end type
+
 public enum
 	--**
 	-- No encoding is necessary
@@ -509,18 +522,12 @@ public function http_post(sequence url, object data, object headers = 0,
 	return content
 end function
 
- 
-integer libcurl = open_dll("libcurl.so") 
-if libcurl = 0 then libcurl = open_dll("libcurl.so.3") end if 
-if libcurl = 0 then libcurl = open_dll("libcurl.so.4") end if 
-if libcurl = 0 then  puts(1, "Failed to open libcurl.so\n")  abort(1) end if 
- 
 constant 
-    CURLOPT_URL = 10002, 
-    CURLOPT_WRITEFUNCTION = 20011, 
-    CURLOPT_WRITEDATA = 10001, 
-    CURLOPT_FOLLOWLOCATION = 52,
-    CURLOPT_HEADERFUNCTION = 79
+   CURLOPT_URL = 10002, 
+   CURLOPT_WRITEFUNCTION = 20011, 
+   CURLOPT_WRITEDATA = 10001, 
+   CURLOPT_FOLLOWLOCATION = 52,
+   CURLOPT_HEADERFUNCTION = 79
  
 sequence cb_data 
 function curl_callback(atom ptr, atom size, atom nmemb, atom writedata) 
@@ -528,22 +535,17 @@ function curl_callback(atom ptr, atom size, atom nmemb, atom writedata)
     cb_data &= line 
     return nmemb 
 end function 
-constant curl_cb = call_back(routine_id("curl_callback")) 
+constant curl_cb = call_back({'+', routine_id("curl_callback")}) 
 sequence cb_header = {} 
 function curl_header_callback(atom ptr, atom size, atom nmemb, atom writedata) 
-    object line = peek({ptr, size * nmemb}) 
-    puts(1, '.')
+    object line = peek({ptr, size * nmemb})
     cb_header = append(cb_header, split(line, ":"))
     return nmemb 
 end function 
-constant curl_header_cb = call_back(routine_id("curl_header_callback")) 
+constant curl_header_cb = call_back({'+',routine_id("curl_header_callback")}) 
 
-integer curl_easy_init = define_c_func(libcurl, "curl_easy_init", {}, C_POINTER), 
-    curl_easy_setopt =   define_c_proc(libcurl, "curl_easy_setopt", {C_POINTER, C_LONG, C_POINTER}), 
-    curl_easy_perform = define_c_func(libcurl, "curl_easy_perform", {C_POINTER}, C_LONG), 
-    curl_easy_cleanup = define_c_proc(libcurl, "curl_easy_cleanup", {C_POINTER}),
-    curl_slist_append = define_c_func(libcurl, "curl_slist_append", {C_POINTER, C_POINTER}, C_POINTER),
-    curl_slist_free_all = define_c_proc(libcurl, "curl_slist_free_all", {C_POINTER})
+constant curl_slist_appendx = define_c_func(dll, "+curl_slist_append", {C_POINTER, C_POINTER}, C_POINTER)
+
 
 --**
 -- Get a HTTP resource.
@@ -577,24 +579,14 @@ integer curl_easy_init = define_c_func(libcurl, "curl_easy_init", {}, C_POINTER)
 -- See Also:
 --   [[:http_post]]
 --
-public function http_get(
+with trace
+public function http_get(                                            
     sequence url, object headers = 0, 
     natural follow_redirects = 10, natural timeout = 15)
-    atom url_ptr = allocate_string(url), res, curl, list = 0
-    if libcurl = -1 then
-	return ERR_LIBRARY_INIT 
-    end if
-    if not url_ptr or 
-	curl_easy_init = -1 or
-	curl_easy_init = -1 or    
-	curl_easy_setopt = -1 or 
-	curl_easy_perform = -1 or    
-	curl_easy_cleanup = -1 then 
-	return ERR_LIBRARY_INIT 
-    end if
-    curl = c_func(curl_easy_init, {}) 
-    if not curl then  
-	return ERR_CURL_INIT  
+    atom url_ptr = allocate_string(url), res, list = 0
+    object curl = curl_easy:init()
+    if sequence(curl) then
+	return ERR_CURL_INIT
     end if 
     -- Temporary: <<<< Remove before merge
     atom error_buffer = allocate(CURL_ERROR_SIZE)
@@ -603,30 +595,57 @@ public function http_get(
     sequence request = format_base_request("GET", url, headers)
     integer port = request[R_PORT] 
 
-    c_proc(curl_easy_setopt, {curl, CURLOPT_PROTOCOLS, or_bits(CURLPROTO_HTTPS, CURLPROTO_HTTP)})
-    c_proc(curl_easy_setopt, {curl, CURLOPT_URL, url_ptr}) 
-    c_proc(curl_easy_setopt, {curl, CURLOPT_PORT, port})
-    c_proc(curl_easy_setopt, {curl, CURLOPT_WRITEFUNCTION, curl_cb}) 
-    c_proc(curl_easy_setopt, {curl, CURLOPT_WRITEDATA, 0}) 
-    c_proc(curl_easy_setopt, {curl, CURLOPT_HEADERFUNCTION, curl_header_cb})
-    c_proc(curl_easy_setopt, {curl, CURLOPT_FOLLOWLOCATION, follow_redirects != 0}) 
+    atom x = curl_easy:setopt(curl, curl:CURLOPT_PROTOCOLS, or_bits(CURLPROTO_HTTP, CURLPROTO_HTTPS))    
+    setopt(curl, curl:CURLOPT_URL, url_ptr)
+    --setopt(curl, curl:CURLOPT_PORT, port)
+    setopt(curl, CURLOPT_SSL_VERIFYPEER, 0)
+    setopt(curl, CURLOPT_WRITEFUNCTION, curl_cb) 
+    setopt(curl, curl:CURLOPT_WRITEDATA, 0) 
+    setopt(curl, curl:CURLOPT_HEADERFUNCTION, curl_header_cb)
+    setopt(curl, CURLOPT_FOLLOWLOCATION, follow_redirects != 0) 
     if follow_redirects then
-	c_proc(curl_easy_setopt, {curl, CURLOPT_MAXREDIRS, follow_redirects})
+	setopt(curl, CURLOPT_MAXREDIRS, follow_redirects)
     end if
     -- Temporary: <<<< Remove before merge
-    c_proc(curl_easy_setopt, {curl, CURLOPT_ERRORBUFFER, error_buffer}) 
+    setopt(curl, curl:CURLOPT_ERRORBUFFER, error_buffer) 
     poke(error_buffer,  "No error\n" & 0)
     -- Temporary: >>>> Remove before merge
-    --c_proc(curl_easy_setopt, {curl, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED})
+    --setopt(curl, curl:CURLOPT_HEADEROPT, CURLHEADER_UNIFIED)
+    sequence pointers = {}
+
+    -- The User-Agent is mandatory
+    sequence cmd = command_line()
+    if atom(headers) then
+    	headers = {}
+    end if
+    sequence concat_this = {{"User-Agent", cmd[2]}}
+    for i = 1 to length(headers) do
+	if equal(headers[i][1], "User-Agent") then
+		concat_this = {}
+	end if
+    end for
+    headers = headers & concat_this
+    
+    atom p
     if sequence(headers) then
-	for i = 1 to length(headers) do
-	    list = c_func(curl_slist_append, {list, allocate_string(headers[i][1] & ": "& headers[i][2])})
-        end for
-	c_proc(curl_easy_setopt, {curl, CURLOPT_HTTPHEADER, list})
+    	if length(headers)=2 and cstring(headers[1]) and cstring(headers[2]) then
+    		-- does p get copied in curl_list_append?
+    		-- Be safe: let it leak.
+    	     p = allocate_string(headers[1] & ": "& headers[2])
+    	     pointers &= p
+    	     list = c_func(curl_slist_appendx, {list, p})
+    	else
+	    for i = 1 to length(headers) do
+	        p = allocate_string(headers[i][1] & ": "& headers[i][2])
+	        pointers &= p
+	    	list = c_func(curl_slist_appendx, {list, p})
+	    end for
+        end if
+	curl_easy:setopt(curl, curl:CURLOPT_HTTPHEADER, list)
     end if
     cb_data = ""
     cb_header = ""
-    res = c_func(curl_easy_perform, {curl}) 
+    res = perform(curl)
     if res != 0 then
         -- Temporary: <<<< Remove before merge
         sequence error = peek_string(error_buffer)
@@ -642,9 +661,9 @@ public function http_get(
     free(error_buffer)
     free(url_ptr) 
     if list != 0 then
-	c_proc(curl_slist_free_all, {list})
+	curl_slist_free_all(list)
     end if
-    c_proc(curl_easy_cleanup, {curl})
+    curl_easy:cleanup(curl)
     if res = 0 then  
         return {cb_header, cb_data}
     end if 
