@@ -2499,7 +2499,7 @@ end ifdef
  */
 public function curl_slist_append( atom slist, sequence string )
 
-	atom addr = allocate_string( string, TRUE )
+	atom addr = allocate_string( string, FALSE )
 
 	return c_func( _curl_slist_append, {slist,addr} )
 end function
