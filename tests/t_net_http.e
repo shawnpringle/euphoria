@@ -4,8 +4,7 @@ include std/search.e
 include std/math.e
 include std/os.e
 include std/pretty.e
-with trace
-trace(1)
+
 ifdef not NOINET_TESTS then
 	-- this gives the server user:pass of devel:devel
 	constant authorize_header = {"Authorization", "Basic ZGV2ZWw6ZGV2ZWw="} 

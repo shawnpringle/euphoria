@@ -28,8 +28,6 @@ ifdef not EUC_DLL then
 include std/task.e
 end ifdef
 
-with trace
-
 constant USER_AGENT_HEADER = 
 	sprintf("User-Agent: Euphoria-HTTP/%d.%d\r\n", {
 		version_major(), version_minor() })
@@ -611,9 +609,7 @@ public function http_get(
 	return http_get_wininet(url, headers, follow_redirects, timeout)
     end if 
     atom url_ptr = allocate_string(url, 1) 
-    -- Temprary: <<<< Remove before merge
-    atom error_buffer = allocate(CURL_ERROR_SIZE)
-    -- Temporary: >>>> Remove before merge
+
 
     sequence request = format_base_request("GET", url, headers)
     integer port = request[R_PORT] 
@@ -629,10 +625,7 @@ public function http_get(
     if follow_redirects then
 	curl_easy_setopt_long(curl, CURLOPT_MAXREDIRS, follow_redirects)
     end if
-    -- Temporary: <<<< Remove before merge
-    curl_easy_setopt_objptr(curl, curl:CURLOPT_ERRORBUFFER, error_buffer) 
-    poke(error_buffer,  "No error\n" & 0)
-    -- Temporary: >>>> Remove before merge
+
     --curl_easy_setopt_objptr(curl, curl:CURLOPT_HEADEROPT, CURLHEADER_UNIFIED)
     -- The User-Agent is mandatory
     sequence cmd = command_line()
@@ -659,19 +652,8 @@ public function http_get(
     cb_data = ""
     cb_header = ""
     res = curl_easy_perform(curl)
-    if res != 0 then
-        -- Temporary: <<<< Remove before merge
-        sequence error = peek_string(error_buffer)
-	if find(1, error > 128) then
-	    printf(2, "Error = ")
-            print(2, error)
-            puts(2, 10)
-        else 
-            puts(2, "Error = " & error & "\n")
-        end if
-        -- Temporary: >>>> Remove before merge
-    end if
-    free(error_buffer)
+
+
 
     if list != 0 then
 	curl_slist_free_all(list)
