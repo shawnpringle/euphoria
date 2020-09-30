@@ -5,6 +5,7 @@ include std/math.e
 include std/os.e
 include std/pretty.e
 with trace
+trace(1)
 ifdef not NOINET_TESTS then
 	-- this gives the server user:pass of devel:devel
 	constant authorize_header = {"Authorization", "Basic ZGV2ZWw6ZGV2ZWw="} 
@@ -12,8 +13,7 @@ ifdef not NOINET_TESTS then
 	object content
 
 	content = http_get("http://www.iana.org/")
-	test_true("http_get underlying CURL library gets loaded", compare(content, ERR_CURL_INIT))
-		assert("http_get content readable with http_get slash only path", length(content) > 1)
+	assert("http_get content readable with http_get slash only path", length(content) > 1)
 	test_not_equal("http_get content non-empty with http_get slash only path", length(content[2]), 0)
 
 	content = http_get("http://www.iana.org")

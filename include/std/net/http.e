@@ -22,10 +22,13 @@ include std/machine.e
 include curl/curl.e as curl
 include curl/easy.e
 include std/dll.e
+include std/filesys.e
 
 ifdef not EUC_DLL then
 include std/task.e
 end ifdef
+
+with trace
 
 constant USER_AGENT_HEADER = 
 	sprintf("User-Agent: Euphoria-HTTP/%d.%d\r\n", {
@@ -669,7 +672,7 @@ public function http_get(
         -- Temporary: >>>> Remove before merge
     end if
     free(error_buffer)
-    free(url_ptr) 
+
     if list != 0 then
 	curl_slist_free_all(list)
     end if
