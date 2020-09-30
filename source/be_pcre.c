@@ -524,7 +524,7 @@ int replace_pcre(const char *rep, const char *Src, int len, int *ovector, int cn
 	add(&dlen, &dest, Src + ovector[1], len - ovector[1] + 1, &flag);
 	
     *Dlen = dlen;
-    *Dest = dest;
+    if (*Dest = dest)
 	dest[dlen] = 0; // make sure it's zero terminated
     return 0;
 }
