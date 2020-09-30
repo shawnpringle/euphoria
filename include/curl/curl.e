@@ -2499,6 +2499,11 @@ end ifdef
  */
 public function curl_slist_append( atom slist, sequence string )
 
+        -- SDP 2020/09/30: The ownership of memory is a classic problem for languages that do not handle
+        -- memory for you. Most of the time, when you pass a pointer into a routine you can trust it not
+        -- to free the pointer you send it but curl_slist_append accepts a pointer to create its
+        -- structure and curl_slist_free_all frees not only the linked list structure but also the
+        -- strings passed in.
 	atom addr = allocate_string( string, FALSE )
 
 	return c_func( _curl_slist_append, {slist,addr} )
