@@ -53,7 +53,9 @@ integer short_circuit = 0  -- are we doing short-circuit code?
 
 boolean short_circuit_B = FALSE   -- are we in the skippable part of a short
 								  -- circuit expression? given short_circuit is TRUE.
-
+boolean goto_used = FALSE    -- A goto statement was used in this routine or toplevel which means we cannot count on what 
+							-- the interpreter has determined if the value had been initialized or not or what type it is.
+							-- See ticket : 829.   https://openeuphoria.org/ticket/829.wc
 integer SC1_patch          -- place to patch jump address for SC1 ops
 integer SC1_type           -- OR or AND
 integer start_index        -- start of current top level command
@@ -246,6 +248,7 @@ export procedure InitParser()
 	param_num = -1
 	entry_stack = {}
 	goto_init = map:new()
+	goto_used = FALSE
 end procedure
 
 sequence switch_stack = {}
@@ -303,18 +306,21 @@ procedure InitCheck(symtab_index sym, integer ref)
 -- emit INIT_CHECK opcode if we aren't sure if a var has been
 -- initialized yet. ref is TRUE if this is a read of this var
 
+-- We cannot count on any information we think we have now.  https://openeuphoria.org/ticket/829.wc
+-- Thanks for using goto.		
+
 	if sym < 0 or (SymTab[sym][S_MODE] = M_NORMAL and
 	    SymTab[sym][S_SCOPE] != SC_LOOP_VAR and
 	    SymTab[sym][S_SCOPE] != SC_GLOOP_VAR) then
 		if sym < 0 or ((SymTab[sym][S_SCOPE] != SC_PRIVATE and
-		   equal(SymTab[sym][S_OBJ], NOVALUE)) or
+		   (equal(SymTab[sym][S_OBJ], NOVALUE) or goto_used)) or
 		   (SymTab[sym][S_SCOPE] = SC_PRIVATE and
 		   SymTab[sym][S_VARNUM] >= SymTab[CurrentSub][S_NUM_ARGS])) then
 			if sym < 0 or (SymTab[sym][S_INITLEVEL] = -1)
-			or (SymTab[sym][S_SCOPE] != SC_PRIVATE)
+			or (SymTab[sym][S_SCOPE] != SC_PRIVATE) or goto_used
 			then
 				if ref then
-					if sym > 0 and (SymTab[sym][S_SCOPE] = SC_UNDEFINED) then
+					if sym > 0 and (SymTab[sym][S_SCOPE] = SC_UNDEFINED) or goto_used then
 						emit_op(PRIVATE_INIT_CHECK)
 					elsif sym < 0 or find(SymTab[sym][S_SCOPE], SCOPE_TYPES) then
 						emit_op(GLOBAL_INIT_CHECK) -- will become NOP2
@@ -325,10 +331,10 @@ procedure InitCheck(symtab_index sym, integer ref)
 				end if
 				if sym > 0 
 				and (short_circuit <= 0 or short_circuit_B = FALSE)
-				and not (SymTab[sym][S_SCOPE] != SC_PRIVATE) then
+				and SymTab[sym][S_SCOPE] = SC_PRIVATE then
 					
 					if CurrentSub != TopLevelSub 
-					or current_file_no = length( known_files ) then
+					or current_file_no = length( known_files ) or goto_used then
 						-- if we're in top level code, and we've already included other files,
 						-- we can't mark this as initialized, since one of those files could
 						-- use the symbol before we initialize
@@ -2011,6 +2017,7 @@ procedure Goto_statement()
 	integer n
 	integer num_labels
 
+	goto_used = TRUE
 	tok = next_token()
 	num_labels = length(goto_labels)
 
@@ -4437,6 +4444,7 @@ procedure SubProg(integer prog_type, integer scope, integer deprecated)
 		last_sym = enum_syms[$]
 		SymTab[last_sym][S_NEXT] = 0
 	end if
+	goto_used = FALSE
 end procedure
 
 export procedure InitGlobals()
