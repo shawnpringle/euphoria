@@ -647,7 +647,7 @@ public function http_get(
 	    	list = curl_slist_append(list, headers[i][1] & ": "& headers[i][2])
 	    end for
         end if
-	curl_easy_setopt_objptr(curl, curl:CURLOPT_HTTPHEADER, list)
+	curl_easy_setopt_slist(curl, curl:CURLOPT_HTTPHEADER, list)
     end if
     cb_data = ""
     cb_header = ""
