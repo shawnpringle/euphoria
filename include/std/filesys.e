@@ -440,6 +440,14 @@ public function dir(sequence name)
 	end ifdef
 end function
 
+function lower_equal(sequence s, sequence t)
+	if length(s) != length(t) then
+		return 0
+	end if
+	return find(0, and_bits(xor_bits(s,t), #CF) = 0) = 0
+end function
+
+
 --**
 -- Return the name of the current working directory.
 --
@@ -459,10 +467,32 @@ end function
 --
 -- See Also:
 -- 	[[:dir]], [[:chdir]]
-
 public function current_dir()
 -- returns name of current working directory
-	return machine_func(M_CURRENT_DIR, 0)
+	sequence directory = machine_func(M_CURRENT_DIR, 0)
+	if platform() <= 2 then
+		-- In the case of DOS and Windows.  We must walk the directory in order to get the
+		-- correct caseness of the current directory.
+		object list
+		integer slash_location2
+		integer slash_location = length(directory) + 1
+		while slash_location != 0 with entry do
+			list = dir(directory[1..slash_location-1])
+			if sequence(list) then for i = 1 to length(list) do
+				if lower_equal((list[i][D_NAME]), (directory[slash_location+1..slash_location2-1])) then
+					if slash_location2 > length(directory) then
+						directory = directory[1..slash_location] & list[i][D_NAME]
+					else
+						directory = directory[1..slash_location] & list[i][D_NAME] & directory[slash_location2..$]
+					end if
+				end if
+			end for end if
+		entry
+			slash_location2 = slash_location
+			slash_location = rfind(SLASH, directory, slash_location-1)
+		end while
+	end if
+	return directory
 end function
 
 --**
