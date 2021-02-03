@@ -611,7 +611,10 @@ public function http_get(
     atom url_ptr = allocate_string(url, 1) 
 
 
-    sequence request = format_base_request("GET", url, headers)
+    object request = format_base_request("GET", url, headers)
+    if atom(request) then
+            return request
+    end if
     integer port = request[R_PORT] 
 
     atom x = curl_easy_setopt_long(curl, curl:CURLOPT_PROTOCOLS, or_bits(CURLPROTO_HTTP, CURLPROTO_HTTPS))    
