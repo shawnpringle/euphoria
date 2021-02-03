@@ -10,3 +10,4 @@ build
 **/#*#
 .*.marks
 source/build
+*.tar
