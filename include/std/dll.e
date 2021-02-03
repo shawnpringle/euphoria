@@ -76,6 +76,8 @@ public constant
 	C_DWORDLONG  = C_LONGLONG,
 	$
 	
+public include std/win32/w32dllconst.ew
+
 --****
 -- === External Euphoria Type Constants
 -- These are used for arguments to and the return value from a Euphoria shared
