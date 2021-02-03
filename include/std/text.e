@@ -16,6 +16,7 @@ include std/pretty.e
 include std/search.e
 include std/sequence.e
 include std/serialize.e
+include std/os.e
 
 --****
 -- === Routines
@@ -532,15 +533,15 @@ end ifdef
 --   [[:upper]], [[:proper]], [[:set_encoding_properties]], [[:get_encoding_properties]]
 
 public function lower(object x)
-	if length(lower_case_SET) != 0 then
+	if object(lower_case_SET) and length(lower_case_SET) != 0 then
 		return stdseq:mapping(x, upper_case_SET, lower_case_SET)
 	end if
 	
-	ifdef WINDOWS then
+	if platform() = WINDOWS and object(lower_case_SET) then
 		return change_case(x, api_CharLowerBuff)
-	elsedef	
+	else	
 		return x + (x >= 'A' and x <= 'Z') * TO_LOWER
-	end ifdef
+	end if
 end function
 
 --**
