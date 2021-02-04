@@ -43,7 +43,6 @@ ifdef EU4_0 then
 	with define BITS32
 end ifdef
 
-
 constant INCLUDE_LIMIT = 30   -- maximum depth of nested includes
 constant MAX_FILE = 256       -- maximum number of source files
 
@@ -1002,7 +1001,7 @@ ifdef BITS32 then
 		-- take no chances with the parsing engine to declare the maximum double here or we will
 		-- inherit a limit from the way the translator parses the number!
 		MAX_ATOM = float64_to_atom( bits_to_bytes( repeat(1,52) & 0 & repeat(1,10) & 0 ) ),
-		almost_max_16   = (MAX_ATOM-15) / 16,
+		ALMOST_MAX_ATOM   = floor(MAX_ATOM / 16),
 		$
 	
 elsifdef BITS64 then
@@ -1022,7 +1021,6 @@ constant common_int_text = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "1
 constant common_ints     = { 0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   10,   11,   12,   13,   20,   50,   100,   1000 }
 function MakeInt(sequence text, integer nBase = 10)
 -- make a non-negative integer out of a string of digits
--- raises FE_OVERFLOW on overflow.
 
 	integer num, maxchk
 	atom fnum
@@ -1071,14 +1069,12 @@ function MakeInt(sequence text, integer nBase = 10)
 			end if
 		else
 			ifdef BITS32 then
-				if fnum >= almost_max_16 then
-					ifdef BITS32 then
-						-- mathematically equivalent to: fnum * nBase + digit > MAX_DOUBLE
-						-- but possible to calculate with Euphoria atoms
-						if fnum > (MAX_ATOM - digit)/nBase then
-							fenv:raise(FE_OVERFLOW)					
-						end if
-					end ifdef
+				if fnum >= ALMOST_MAX_ATOM then
+					-- mathematically equivalent to: fnum * nBase + digit > MAX_DOUBLE
+					-- but possible to calculate with Euphoria atoms
+					if fnum > (MAX_ATOM - digit)/nBase then
+						CompileErr(NUMBER_IS_TOO_BIG)
+					end if
 				end if
 			end ifdef
 			fnum = fnum * nBase + digit
@@ -1219,6 +1215,9 @@ function my_sscanf(sequence yytext)
 		elsedef
 			InternalErr( ERROR_IN_PARSING_SCIENTIFIC_NOTATION, "Scanning scientific notation in my_sscanf" )
 		end ifdef
+		if mantissa = PINF or mantissa = MINF then
+			CompileErr(NUMBER_IS_TOO_BIG)
+		end if
 		for yi = 1 to length(yytext) do
 			integer ychar = yytext[yi]
 			if ychar = 'e' or ychar = 'E' then
@@ -1227,11 +1226,10 @@ function my_sscanf(sequence yytext)
 			end if
 			if ychar > '0' and ychar <= '9' and mantissa = 0 then
 				-- non zero digit but we got a zero value from the function.
-				fenv:raise(FE_UNDERFLOW)
-				exit
+				CompileErr(NUMBER_IS_TOO_SMALL)
 			end if
 		end for
-		goto "floating_point_check"
+		return mantissa
 	end if
 	mantissa = 0.0
 	ndigits = 0
@@ -1298,7 +1296,7 @@ function my_sscanf(sequence yytext)
 		if frac = 0 and not_zero then
 			-- the literal represents a non-zero number that 
 			-- is too small to be representable as an atom.
-			fenv:raise(fenv:FE_UNDERFLOW)
+			CompileErr(NUMBER_IS_TOO_SMALL)
 		end if
 	end if
 	
@@ -1306,58 +1304,6 @@ function my_sscanf(sequence yytext)
 		CompileErr(NUMBER_NOT_FORMED_CORRECTLY)  -- no digits
 	end if
 
-	--The following code is already handled by the call to
-	--scientific_to_atom() above. It can probably be removed.
-	/* if c = 'e' or c = 'E' then
-		-- get exponent sign
-		e_sign = +1
-		e_mag = 0
-		c = yytext[i]
-		i += 1
-		if c = '-' then
-			e_sign = -1
-		elsif c != '+' then
-			i -= 1
-		end if
-		-- get exponent magnitude
-		c = yytext[i]
-		i += 1
-		if c >= '0' and c <= '9' then
-			e_mag = c - '0'
-			c = yytext[i]
-			i += 1
-			while c >= '0' and c <= '9' do
-				e_mag = e_mag * 10 + c - '0'
-				c = yytext[i]
-				i += 1
-				if e_mag > 1000 then -- avoid int overflow. can only have
-					exit             -- 200-digit mantissa to reduce mag
-				end if
-			end while
-		else
-			return {} -- no exponent
-		end if
-		e_mag = e_sign * e_mag
-		if e_mag > 308 then
-			mantissa = mantissa * power(10.0, 308.0)
-			e_mag = e_mag - 308
-			while e_mag > 0 do
-				mantissa = mantissa * 10.0 -- Could crash? No we'll get INF.
-				e_mag -= 1
-			end while
-		else
-			mantissa = mantissa * power(10.0, e_mag)
-		end if
-	end if */
-	label "floating_point_check"
-	-- we may have overflowed calculating the fraction part...
-	-- so, it is better we check whether it is underflowed  
-	-- before we check whether it has overflowed.
-	if fenv:test(fenv:FE_UNDERFLOW) then
-		CompileErr(NUMBER_IS_TOO_SMALL)
-	elsif fenv:test(fenv:FE_OVERFLOW) or real_overflow then -- ex = {FE_OVERFLOW}
-		CompileErr(NUMBER_IS_TOO_BIG)
-	end if
 	return mantissa
 end function
 
@@ -1765,7 +1711,7 @@ export function Scanner()
 			yytext = {ch}
 			is_int = (ch != '.')
 			basetype = -1 -- default is decimal
-			while 1 with entry do
+			while 1 with entry do			
 				if char_class[ch] = DIGIT then
 					yytext &= ch
 
@@ -1862,10 +1808,9 @@ export function Scanner()
 				end if
 				fenv:clear(FE_OVERFLOW)
 				d = MakeInt(yytext, nbase[basetype])
-				if fenv:test(FE_OVERFLOW) then
+				if d = PINF then
 					CompileErr(NUMBER_IS_TOO_BIG)
-				end if
-				if is_integer(d) then
+				elsif is_integer(d) then
 					return {ATOM, NewIntSym(d)}
 				else
 					return {ATOM, NewDoubleSym(d)}
@@ -1879,7 +1824,9 @@ export function Scanner()
 
 			-- f.p. or large int
 			d = my_sscanf(yytext)
-			if sequence(d) then
+			if d = PINF then
+				CompileErr(NUMBER_IS_TOO_BIG)
+			elsif sequence(d) then
 				CompileErr(NUMBER_NOT_FORMED_CORRECTLY)
 			elsif is_int and d <= TMAXINT_DBL then
 				return {ATOM, NewIntSym(d)}  -- 1 to 1.07 billion
@@ -1991,7 +1938,7 @@ export function Scanner()
 				d = i
 				if i >= TMAXINT/32 then
 					is_int = FALSE
-					while TRUE do
+					while d < ALMOST_MAX_ATOM do
 						ch = getch()  -- eventually END_OF_FILE_CHAR or new-line
 						if char_class[ch] = DIGIT then
 							if ch != '_' then
@@ -2007,6 +1954,30 @@ export function Scanner()
 							exit
 						end if
 					end while
+					
+					-- After d reaches ALMOST_MAX_ATOM, any digit added will over flow,
+					-- whether it is F or 0 because at this point the numbers are so
+					-- large that a ones place number will have no effect on it and
+					-- we only need to consider the multiplication:
+					-- d * 16 + x becomes d * 16, where x < K where K is a number much larger
+					-- than 16.
+					-- If d * 16 > MAX_ATOM, then we must write this as d > MAX_ATOM/16, as 
+					-- the former expression would reach a number we cannot represent in an atom
+					-- and would call itself "infinity".
+					
+					while d >= ALMOST_MAX_ATOM do 
+						ch = getch()  -- eventually END_OF_FILE_CHAR or new-line
+						if ch = '_' then
+							continue
+						elsif char_class[ch] = DIGIT or (ch >= 'A' and ch <= 'F') or 
+						(ch >= 'a' and ch <= 'f')
+						then
+							CompileErr(NUMBER_IS_TOO_BIG)
+						else
+							exit
+						end if
+					end while
+					
 				end if
 
 				if fenv:test(FE_OVERFLOW) then
