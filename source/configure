@@ -17,6 +17,7 @@ UNAME_REL=`(uname -r) 2>/dev/null` || UNAME_REL=unknown
 # paths.
 
 USECYPPATH="false"
+ALIGN4=1
 
 # argument sent to the pwd command.  Most platforms no arguments.
 PWDARG=
@@ -121,6 +122,7 @@ else
 fi
 
 BUILDJOBS="1"
+ALIGNMENT="1"
 
 # default use source
 if [ "$SOURCEDIR" = `pwd $PWDARG` ] ; then
@@ -191,14 +193,18 @@ while [ "$1" != "" ]; do
 	
 	--no-managed-mem )
 		 MANAGED_MEM=0
-		;;
+		;;    
 
 	--managed-mem)
 		 MANAGED_MEM=1
 		;;
 
 	--align4 )
-		 ALIGN4=1
+		 ALIGNMENT=4
+		;;
+
+	--align8 )
+		 ALIGNMENT=8
 		;;
 
 	--without-euphoria )
@@ -407,7 +413,9 @@ while [ "$1" != "" ]; do
 		echo "   --no-managed-mem    Disable managed memory. Used on Windows."
 		echo "   --managed-mem       Enable managed memory. Used on Windows."
 		echo "   --align4            Malloc allocates addresses that are"
-		echo "                       always 4 byte aligned. Used on Windows."
+		echo "                       always 4 byte aligned.  Universal."
+		echo "   --align8            Malloc allocates addresses that are"
+		echo "                       always 8 byte aligned.  All Unixes and Windows 98 and newer."
 		echo "   --without-euphoria  Don't use a precompiled version of Euphoria to build."
 		echo "   --eubin value       Set the path of the precompiled"
 		echo "                       binaries used to intrepret and translate the sources."
@@ -510,18 +518,32 @@ else
 fi
 
 if [ "$TARGET" = "EWINDOWS" ]; then
-	# MANAGED_MEM and ALIGN4 are on by default for Windows
+	# MANAGED_MEM and ALIGNMENT=4 are on by default for Windows
 	# and only Windows
 	if [ "x$MANAGED_MEM" = "x" ]; then
 		echo MANAGED_MEM=1 >> "$PREFIX"${CONFIG_FILE}
 	else
-		echo MANAGED_MEM=0 >> "$PREFIX"${CONFIG_FILE}
+		echo MANAGED_MEM=$MANAGED_MEM >> "$PREFIX"${CONFIG_FILE}
 	fi
 
-	if [ "x$ALIGN4" = "x" ]; then
+	# Default.  The variable, ALIGN4, really means not necesarily always 8-byte aligned.
+	if [ "x$ALIGNMENT" = "x" ]; then
+		echo ALIGN4=1 >> "$PREFIX"${CONFIG_FILE}
+		echo ALIGNMENT=4 >> "$PREFIX"${CONFIG_FILE}
+	elif [ "x$ALIGNMENT" = "x8" ]; then
+		echo ALIGNMENT=$ALIGNMENT >> "$PREFIX"${CONFIG_FILE}
 		echo ALIGN4=0 >> "$PREFIX"${CONFIG_FILE}
 	else
+		echo ALIGNMENT=$ALIGNMENT >> "$PREFIX"${CONFIG_FILE}
 		echo ALIGN4=1 >> "$PREFIX"${CONFIG_FILE}
+	fi
+else
+	if [ "x$ALIGNMENT" = "x" ]; then
+		echo ALIGN4=0 >>  "$PREFIX"${CONFIG_FILE}
+		echo ALIGNMENT=8 >> "$PREFIX"${CONFIG_FILE}
+	else
+		echo ALIGN4=1 >> "$PREFIX"${CONFIG_FILE}
+		echo ALIGNMENT=$ALIGNMENT >> "$PREFIX"${CONFIG_FILE}
 	fi
 fi
 
